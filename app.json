@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Ragnabeurk PNJ",
+    "slug": "ragnabeurk-pnj",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.ragnabeurk.pnj",
+      "versionCode": 1,
+      "permissions": []
+    }
+  }
+}
