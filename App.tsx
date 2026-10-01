@@ -137,7 +137,24 @@ export default function App(){
         <Text style={styles.label}>Race</Text>
         <ScrollView horizontal>{["Aléatoire",...races.map(r=>r.id)].map(x=><Pressable key={x} onPress={()=>setRaceChoice(x)} style={[styles.chip,raceChoice===x&&styles.selected]}><Text style={styles.chipText}>{x==="Aléatoire"?"Aléatoire":races.find(r=>r.id===x)?.name}</Text></Pressable>)}</ScrollView>
         <Text style={styles.label}>Classe</Text>
-        <ScrollView horizontal>{["Aléatoire",...classes.map(c=>c.id)].map(x=><Pressable key={x} onPress={()=>setClassChoice(x)} style={[styles.chip,classChoice===x&&styles.selected]}><Text style={styles.chipText}>{x==="Aléatoire"?"Aléatoire":classes.find(c=>c.id===x)?.name}</Text></Pressable>)}</ScrollView>
+        <View style={styles.classRows}>
+          <View style={styles.classRow}>
+            <Pressable onPress={()=>setClassChoice("Aléatoire")} style={[styles.classButton,classChoice==="Aléatoire"&&styles.selected]}>
+              <Text style={styles.chipText}>🎲 Aléatoire</Text>
+            </Pressable>
+          </View>
+          {(["Base","Avancée","Super"] as Category[]).map(cat=>{
+            const list=classes.filter(c=>c.category===cat);
+            return <View key={cat} style={styles.classRow}>
+              <Text style={styles.classRowLabel}>{cat}</Text>
+              <View style={styles.classButtons}>
+                {list.map(c=><Pressable key={c.id} onPress={()=>setClassChoice(c.id)} style={[styles.classButton,classChoice===c.id&&styles.selected]}>
+                  <Text style={styles.chipText}>{c.name}</Text>
+                </Pressable>)}
+              </View>
+            </View>;
+          })}
+        </View>
         <Text style={styles.label}>Nom (vide = aléatoire)</Text><TextInput style={styles.input} value={nameChoice} onChangeText={setNameChoice} placeholder="Nom manuel"/>
         <Pressable style={styles.bigButton} onPress={generate}><Text style={styles.bigButtonText}>GÉNÉRER UN PNJ</Text></Pressable>
         {current&&<View style={styles.card}><Text style={styles.npcName}>{current.name}</Text><Text style={styles.meta}>{current.race} • {current.className} • {current.category}</Text><Text style={styles.level}>Niveau {current.level} • Total {current.total}</Text>
@@ -193,7 +210,8 @@ const styles=StyleSheet.create({
   h2:{color:"#fff",fontSize:20,fontWeight:"700",marginTop:12,marginBottom:12},label:{color:"#bbb",marginTop:10,marginBottom:5},
   input:{backgroundColor:"#20242b",color:"#fff",padding:10,borderRadius:8,marginBottom:8},inputFlex:{flex:1,backgroundColor:"#20242b",color:"#fff",padding:8,borderRadius:8},
   smallInput:{backgroundColor:"#20242b",color:"#fff",padding:8,borderRadius:7,width:85,marginRight:6},row:{flexDirection:"row",alignItems:"center",gap:5},rowWrap:{flexDirection:"row",flexWrap:"wrap",gap:7},
-  chip:{padding:9,backgroundColor:"#222832",borderRadius:16,marginRight:7},categoryButton:{padding:10,backgroundColor:"#222832",borderRadius:8},selected:{backgroundColor:"#b78b2c"},chipText:{color:"#fff"},
+  chip:{padding:9,backgroundColor:"#222832",borderRadius:16,marginRight:7},
+  classRows:{gap:10,marginBottom:8},classRow:{gap:5},classRowLabel:{color:"#bbb",fontWeight:"700"},classButtons:{flexDirection:"row",flexWrap:"wrap",gap:6},classButton:{padding:9,backgroundColor:"#222832",borderRadius:8},categoryButton:{padding:10,backgroundColor:"#222832",borderRadius:8},selected:{backgroundColor:"#b78b2c"},chipText:{color:"#fff"},
   bigButton:{backgroundColor:"#b78b2c",padding:16,borderRadius:10,marginVertical:14,alignItems:"center"},bigButtonText:{fontWeight:"900",color:"#111"},
   button:{backgroundColor:"#3d4654",padding:12,borderRadius:8,marginTop:10,alignItems:"center"},danger:{backgroundColor:"#74343b",padding:10,borderRadius:8,marginTop:10,alignItems:"center"},buttonText:{color:"#fff",fontWeight:"700"},
   card:{backgroundColor:"#191d24",padding:14,borderRadius:12,marginVertical:8},npcName:{color:"#fff",fontSize:19,fontWeight:"800"},meta:{color:"#aaa",marginVertical:4},level:{color:"#e2bd63",fontSize:18,fontWeight:"700",marginVertical:8},
