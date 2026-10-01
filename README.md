@@ -69,3 +69,9 @@ Le projet contient maintenant un workflow GitHub Actions qui peut compiler l'app
 9. Décompressez l'archive téléchargée puis installez `Ragnabeurk-PNJ.apk` sur votre téléphone.
 
 Le workflow utilise Expo EAS pour la compilation Android. Aucun PC ni installation de Node.js n'est nécessaire sur votre téléphone.
+
+
+### Compilation GitHub Actions
+
+Le workflow GitHub Actions compile directement l'application Android sur le serveur GitHub.
+Il ne nécessite pas de compte EAS ni de clé EXPO_TOKEN.

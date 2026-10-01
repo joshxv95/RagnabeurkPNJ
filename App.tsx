@@ -154,14 +154,22 @@ export default function App(){
 
       {tab==="Données"&&<View>
         <Text style={styles.h2}>Races</Text>
-        {races.map(r=><View style={styles.card} key={r.id}><Text style={styles.npcName}>{r.name}</Text><Text>Poids : {r.weight}</Text><Text>{r.description}</Text>
+        {races.map(r=><View style={styles.card} key={r.id}>
+          <Text style={styles.label}>Nom de la race</Text>
+          <TextInput style={styles.input} value={r.name} onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,name:v}:x))}/>
+          <Text style={styles.label}>Poids</Text>
           <TextInput style={styles.input} value={String(r.weight)} keyboardType="numeric" onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,weight:Number(v)}:x))}/>
+          <Text style={styles.label}>Description</Text>
           <TextInput style={styles.input} value={r.description} onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,description:v}:x))}/>
           <Pressable style={styles.danger} onPress={()=>setRaces(xs=>xs.filter(x=>x.id!==r.id))}><Text style={styles.buttonText}>Supprimer</Text></Pressable>
         </View>)}
         <Pressable style={styles.button} onPress={()=>setRaces(x=>[...x,{id:Date.now().toString(),name:"Nouvelle race",weight:100,description:""}])}><Text style={styles.buttonText}>+ Ajouter une race</Text></Pressable>
         <Text style={styles.h2}>Classes</Text>
-        {classes.map(c=><View style={styles.card} key={c.id}><Text style={styles.npcName}>{c.name} — {c.category}</Text>
+        {classes.map(c=><View style={styles.card} key={c.id}>
+          <Text style={styles.label}>Nom de la classe</Text>
+          <TextInput style={styles.input} value={c.name} onChangeText={v=>setClasses(xs=>xs.map(x=>x.id===c.id?{...x,name:v}:x))}/>
+          <Text style={styles.label}>Catégorie</Text>
+          <View style={styles.rowWrap}>{(["Base","Avancée","Super"] as Category[]).map(cat=><Pressable key={cat} onPress={()=>setClasses(xs=>xs.map(x=>x.id===c.id?{...x,category:cat}:x))} style={[styles.categoryButton,c.category===cat&&styles.selected]}><Text style={styles.chipText}>{cat}</Text></Pressable>)}</View>
           {STATS.map(s=><View style={styles.editRow} key={s}><Text style={styles.statName}>{s}</Text><View style={styles.row}>{(["A","B","C"] as Grade[]).map(g=><Pressable key={g} onPress={()=>setClasses(xs=>xs.map(x=>x.id===c.id?{...x,grades:{...x.grades,[s]:g}}:x))} style={[styles.gradeButton,c.grades[s]===g&&styles.selected]}><Text>{g}</Text></Pressable>)}</View></View>)}
           <Pressable style={styles.danger} onPress={()=>setClasses(xs=>xs.filter(x=>x.id!==c.id))}><Text style={styles.buttonText}>Supprimer</Text></Pressable>
         </View>)}
@@ -184,8 +192,8 @@ const styles=StyleSheet.create({
   tabs:{flexDirection:"row",borderBottomWidth:1,borderColor:"#333"},tab:{flex:1,padding:10,alignItems:"center"},active:{backgroundColor:"#303641"},tabText:{color:"#fff",fontSize:11},
   h2:{color:"#fff",fontSize:20,fontWeight:"700",marginTop:12,marginBottom:12},label:{color:"#bbb",marginTop:10,marginBottom:5},
   input:{backgroundColor:"#20242b",color:"#fff",padding:10,borderRadius:8,marginBottom:8},inputFlex:{flex:1,backgroundColor:"#20242b",color:"#fff",padding:8,borderRadius:8},
-  smallInput:{backgroundColor:"#20242b",color:"#fff",padding:8,borderRadius:7,width:85,marginRight:6},row:{flexDirection:"row",alignItems:"center",gap:5},
-  chip:{padding:9,backgroundColor:"#222832",borderRadius:16,marginRight:7},selected:{backgroundColor:"#b78b2c"},chipText:{color:"#fff"},
+  smallInput:{backgroundColor:"#20242b",color:"#fff",padding:8,borderRadius:7,width:85,marginRight:6},row:{flexDirection:"row",alignItems:"center",gap:5},rowWrap:{flexDirection:"row",flexWrap:"wrap",gap:7},
+  chip:{padding:9,backgroundColor:"#222832",borderRadius:16,marginRight:7},categoryButton:{padding:10,backgroundColor:"#222832",borderRadius:8},selected:{backgroundColor:"#b78b2c"},chipText:{color:"#fff"},
   bigButton:{backgroundColor:"#b78b2c",padding:16,borderRadius:10,marginVertical:14,alignItems:"center"},bigButtonText:{fontWeight:"900",color:"#111"},
   button:{backgroundColor:"#3d4654",padding:12,borderRadius:8,marginTop:10,alignItems:"center"},danger:{backgroundColor:"#74343b",padding:10,borderRadius:8,marginTop:10,alignItems:"center"},buttonText:{color:"#fff",fontWeight:"700"},
   card:{backgroundColor:"#191d24",padding:14,borderRadius:12,marginVertical:8},npcName:{color:"#fff",fontSize:19,fontWeight:"800"},meta:{color:"#aaa",marginVertical:4},level:{color:"#e2bd63",fontSize:18,fontWeight:"700",marginVertical:8},
