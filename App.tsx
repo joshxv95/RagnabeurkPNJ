@@ -92,6 +92,8 @@ export default function App(){
   const [genderChoice,setGenderChoice]=useState<"Aléatoire"|Gender>("Aléatoire");
   const [loaded,setLoaded]=useState(false);
   const [bulkSubRaces,setBulkSubRaces]=useState<Record<string,string>>({});
+  const [dataTab,setDataTab]=useState<"Races"|"Classes"|"Noms">("Races");
+  const [expandedRaceIds,setExpandedRaceIds]=useState<string[]>([]);
 
   useEffect(()=>{(async()=>{
     try{
@@ -173,7 +175,7 @@ export default function App(){
         </View>)}
         <Text style={styles.label}>Classes — aléatoire parmi la sélection</Text>
         <View style={styles.classRows}>
-          {(["Base","Avancée","Super"] as Category[]).map(cat=>{const list=classes.filter(c=>c.category===cat);const allSelected=list.length>0&&list.every(c=>classChoices.includes(c.id));return <View key={cat} style={styles.classRow}>
+          {(["Base","Avancée","Super"] as Category[]).map(cat=>{const list=classes.filter(c=>c.category===cat).sort((a,b)=>a.name.localeCompare(b.name,"fr",{sensitivity:"base"}));const allSelected=list.length>0&&list.every(c=>classChoices.includes(c.id));return <View key={cat} style={styles.classRow}>
             <Pressable onPress={()=>toggleClassCategory(cat)} style={[styles.categorySelectButton,allSelected&&styles.selected]}><Text style={styles.classRowLabel}>{cat}</Text><Text style={styles.chipText}>{allSelected?"Tout désélectionner":"Tout sélectionner"}</Text></Pressable>
             <View style={styles.classButtons}>{list.map(c=><Pressable key={c.id} onPress={()=>toggleClass(c.id)} style={[styles.classButton,classChoices.includes(c.id)&&styles.selected]}><Text style={styles.chipText}>{c.name}</Text></Pressable>)}</View>
           </View>})}
@@ -196,43 +198,65 @@ export default function App(){
       </View>)}</View>}
 
       {tab==="Données"&&<View>
-        <Text style={styles.h2}>Races</Text>
-        {races.map(r=><View style={styles.card} key={r.id}>
-          <Text style={styles.label}>Nom de la race</Text>
-          <TextInput style={styles.input} value={r.name} onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,name:v}:x))}/>
-          <Text style={styles.label}>Poids</Text>
-          <TextInput style={styles.input} value={String(r.weight)} keyboardType="numeric" onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,weight:Number(v)}:x))}/>
-          <Text style={styles.label}>Description</Text>
-          <TextInput style={styles.input} value={r.description} onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,description:v}:x))}/>
-          <Text style={styles.h3}>Sous-races ({(r.subRaces||[]).length})</Text>
-          {(r.subRaces||[]).map(sr=><View style={styles.subRaceEdit} key={sr.id}>
-            <View style={styles.subRaceFields}>
-              <TextInput style={styles.input} value={sr.name} onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:(x.subRaces||[]).map(y=>y.id===sr.id?{...y,name:v}:y)}:x))}/>
-              <TextInput style={styles.input} value={sr.description||""} placeholder="Description (optionnelle)" placeholderTextColor="#777" onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:(x.subRaces||[]).map(y=>y.id===sr.id?{...y,description:v}:y)}:x))}/>
-            </View>
-            <TextInput style={styles.weightInput} value={String(sr.weight)} keyboardType="numeric" onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:(x.subRaces||[]).map(y=>y.id===sr.id?{...y,weight:Number(v)}:y)}:x))}/>
-            <Pressable onPress={()=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:(x.subRaces||[]).filter(y=>y.id!==sr.id)}:x))}><Text style={styles.removeText}>✕</Text></Pressable>
-          </View>)}
-          <Text style={styles.label}>Ajouter plusieurs sous-races (1 nom par ligne)</Text>
-          <TextInput style={[styles.input,styles.multiline]} multiline value={bulkSubRaces[r.id]||""} placeholder="Semi-loup\nSemi-renard\nSemi-chat" placeholderTextColor="#777" onChangeText={v=>setBulkSubRaces(x=>({...x,[r.id]:v}))}/>
-          <Pressable style={styles.button} onPress={()=>{const added=(bulkSubRaces[r.id]||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(name=>({id:Date.now().toString()+Math.random(),name,weight:100,description:""}));if(added.length){setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:[...(x.subRaces||[]),...added]}:x));setBulkSubRaces(x=>({...x,[r.id]:""}));}}}><Text style={styles.buttonText}>+ Importer la liste</Text></Pressable>
-          <Pressable style={styles.button} onPress={()=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:[...(x.subRaces||[]),{id:Date.now().toString()+Math.random(),name:"Nouvelle sous-race",weight:100,description:""}]}:x))}><Text style={styles.buttonText}>+ Ajouter une sous-race</Text></Pressable>
-          <Pressable style={styles.danger} onPress={()=>setRaces(xs=>xs.filter(x=>x.id!==r.id))}><Text style={styles.buttonText}>Supprimer</Text></Pressable>
-        </View>)}
-        <Pressable style={styles.button} onPress={()=>setRaces(x=>[...x,{id:Date.now().toString(),name:"Nouvelle race",weight:100,description:"",subRaces:[]}])}><Text style={styles.buttonText}>+ Ajouter une race</Text></Pressable>
-        <Text style={styles.h2}>Classes</Text>
-        {classes.map(c=><View style={styles.card} key={c.id}>
-          <Text style={styles.label}>Nom de la classe</Text>
-          <TextInput style={styles.input} value={c.name} onChangeText={v=>setClasses(xs=>xs.map(x=>x.id===c.id?{...x,name:v}:x))}/>
-          <Text style={styles.label}>Catégorie</Text>
-          <View style={styles.rowWrap}>{(["Base","Avancée","Super"] as Category[]).map(cat=><Pressable key={cat} onPress={()=>setClasses(xs=>xs.map(x=>x.id===c.id?{...x,category:cat}:x))} style={[styles.categoryButton,c.category===cat&&styles.selected]}><Text style={styles.chipText}>{cat}</Text></Pressable>)}</View>
-          {STATS.map(s=><View style={styles.editRow} key={s}><Text style={styles.statName}>{s}</Text><View style={styles.row}>{(["A","B","C"] as Grade[]).map(g=><Pressable key={g} onPress={()=>setClasses(xs=>xs.map(x=>x.id===c.id?{...x,grades:{...x.grades,[s]:g}}:x))} style={[styles.gradeButton,c.grades[s]===g&&styles.selected]}><Text>{g}</Text></Pressable>)}</View></View>)}
-          <Pressable style={styles.danger} onPress={()=>setClasses(xs=>xs.filter(x=>x.id!==c.id))}><Text style={styles.buttonText}>Supprimer</Text></Pressable>
-        </View>)}
-        <Pressable style={styles.button} onPress={()=>setClasses(x=>[...x,{id:Date.now().toString(),name:"Nouvelle classe",category:"Base",grades:Object.fromEntries(STATS.map(s=>[s,"C"])) as Record<string,Grade>}])}><Text style={styles.buttonText}>+ Ajouter une classe</Text></Pressable>
-        <Text style={styles.h2}>Noms</Text><View style={styles.card}>{names.map((n,i)=><View style={styles.editRow} key={i}><TextInput style={styles.inputFlex} value={n} onChangeText={v=>setNames(xs=>xs.map((x,j)=>j===i?v:x))}/><Pressable onPress={()=>setNames(xs=>xs.filter((_,j)=>j!==i))}><Text>✕</Text></Pressable></View>)}<Pressable style={styles.button} onPress={()=>setNames(x=>[...x,"Nouveau nom"])}><Text style={styles.buttonText}>+ Ajouter un nom</Text></Pressable></View>
-      </View>}
+        <Text style={styles.h2}>Données</Text>
+        <View style={styles.dataTabs}>
+          {(["Races","Classes","Noms"] as const).map(t=><Pressable key={t} onPress={()=>setDataTab(t)} style={[styles.dataTab,dataTab===t&&styles.selected]}><Text style={styles.chipText}>{t==="Races"?"🧬 Races":t==="Classes"?"⚔️ Classes":"🧑 Noms"}</Text></Pressable>)}
+        </View>
 
+        {dataTab==="Races"&&<View>
+          <Text style={styles.help}>Les sous-races sont chargées uniquement lorsque tu ouvres une race, pour garder l'écran fluide.</Text>
+          {races.map(r=>{const expanded=expandedRaceIds.includes(r.id);return <View style={styles.card} key={r.id}>
+            <Pressable onPress={()=>setExpandedRaceIds(xs=>xs.includes(r.id)?xs.filter(id=>id!==r.id):[...xs,r.id])} style={styles.expandHeader}>
+              <View style={{flex:1}}><Text style={styles.npcName}>{r.name}</Text><Text style={styles.meta}>{(r.subRaces||[]).length} sous-race(s) • Poids {r.weight}</Text></View>
+              <Text style={styles.chipText}>{expanded?"▲":"▼"}</Text>
+            </Pressable>
+            {expanded&&<View>
+              <Text style={styles.label}>Nom de la race</Text>
+              <TextInput style={styles.input} value={r.name} onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,name:v}:x))}/>
+              <Text style={styles.label}>Poids</Text>
+              <TextInput style={styles.input} value={String(r.weight)} keyboardType="numeric" onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,weight:Number(v)}:x))}/>
+              <Text style={styles.label}>Description</Text>
+              <TextInput style={styles.input} value={r.description} onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,description:v}:x))}/>
+              <Text style={styles.h3}>Sous-races ({(r.subRaces||[]).length})</Text>
+              {(r.subRaces||[]).map(sr=><View style={styles.subRaceEdit} key={sr.id}>
+                <View style={styles.subRaceFields}>
+                  <TextInput style={styles.input} value={sr.name} onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:(x.subRaces||[]).map(y=>y.id===sr.id?{...y,name:v}:y)}:x))}/>
+                  <TextInput style={styles.input} value={sr.description||""} placeholder="Description (optionnelle)" placeholderTextColor="#777" onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:(x.subRaces||[]).map(y=>y.id===sr.id?{...y,description:v}:y)}:x))}/>
+                </View>
+                <TextInput style={styles.weightInput} value={String(sr.weight)} keyboardType="numeric" onChangeText={v=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:(x.subRaces||[]).map(y=>y.id===sr.id?{...y,weight:Number(v)}:y)}:x))}/>
+                <Pressable onPress={()=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:(x.subRaces||[]).filter(y=>y.id!==sr.id)}:x))}><Text style={styles.removeText}>✕</Text></Pressable>
+              </View>)}
+              <Text style={styles.label}>Ajouter plusieurs sous-races (1 nom par ligne)</Text>
+              <TextInput style={[styles.input,styles.multiline]} multiline value={bulkSubRaces[r.id]||""} placeholder="Semi-loup\nSemi-renard\nSemi-chat" placeholderTextColor="#777" onChangeText={v=>setBulkSubRaces(x=>({...x,[r.id]:v}))}/>
+              <Pressable style={styles.button} onPress={()=>{const added=(bulkSubRaces[r.id]||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(name=>({id:Date.now().toString()+Math.random(),name,weight:100,description:""}));if(added.length){setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:[...(x.subRaces||[]),...added]}:x));setBulkSubRaces(x=>({...x,[r.id]:""}));}}}><Text style={styles.buttonText}>+ Importer la liste</Text></Pressable>
+              <Pressable style={styles.button} onPress={()=>setRaces(xs=>xs.map(x=>x.id===r.id?{...x,subRaces:[...(x.subRaces||[]),{id:Date.now().toString()+Math.random(),name:"Nouvelle sous-race",weight:100,description:""}]}:x))}><Text style={styles.buttonText}>+ Ajouter une sous-race</Text></Pressable>
+              <Pressable style={styles.danger} onPress={()=>{setRaces(xs=>xs.filter(x=>x.id!==r.id));setExpandedRaceIds(xs=>xs.filter(id=>id!==r.id));}}><Text style={styles.buttonText}>Supprimer</Text></Pressable>
+            </View>}
+          </View>})}
+          <Pressable style={styles.button} onPress={()=>{const id=Date.now().toString();setRaces(x=>[...x,{id,name:"Nouvelle race",weight:100,description:"",subRaces:[]}]);setExpandedRaceIds(x=>[...x,id]);}}><Text style={styles.buttonText}>+ Ajouter une race</Text></Pressable>
+        </View>}
+
+        {dataTab==="Classes"&&<View>
+          <Text style={styles.help}>Les classes sont regroupées par catégorie et triées alphabétiquement.</Text>
+          {(["Base","Avancée","Super"] as Category[]).map(cat=><View key={cat}>
+            <Text style={styles.h3}>{cat}</Text>
+            {classes.filter(c=>c.category===cat).sort((a,b)=>a.name.localeCompare(b.name,"fr",{sensitivity:"base"})).map(c=><View style={styles.card} key={c.id}>
+              <Text style={styles.label}>Nom de la classe</Text>
+              <TextInput style={styles.input} value={c.name} onChangeText={v=>setClasses(xs=>xs.map(x=>x.id===c.id?{...x,name:v}:x))}/>
+              <Text style={styles.label}>Catégorie</Text>
+              <View style={styles.rowWrap}>{(["Base","Avancée","Super"] as Category[]).map(cat2=><Pressable key={cat2} onPress={()=>setClasses(xs=>xs.map(x=>x.id===c.id?{...x,category:cat2}:x))} style={[styles.categoryButton,c.category===cat2&&styles.selected]}><Text style={styles.chipText}>{cat2}</Text></Pressable>)}</View>
+              {STATS.map(s=><View style={styles.editRow} key={s}><Text style={styles.statName}>{s}</Text><View style={styles.row}>{(["A","B","C"] as Grade[]).map(g=><Pressable key={g} onPress={()=>setClasses(xs=>xs.map(x=>x.id===c.id?{...x,grades:{...x.grades,[s]:g}}:x))} style={[styles.gradeButton,c.grades[s]===g&&styles.selected]}><Text>{g}</Text></Pressable>)}</View></View>)}
+              <Pressable style={styles.danger} onPress={()=>setClasses(xs=>xs.filter(x=>x.id!==c.id))}><Text style={styles.buttonText}>Supprimer</Text></Pressable>
+            </View>)}
+          </View>)}
+          <Pressable style={styles.button} onPress={()=>setClasses(x=>[...x,{id:Date.now().toString(),name:"Nouvelle classe",category:"Base",grades:Object.fromEntries(STATS.map(s=>[s,"C"])) as Record<string,Grade>}])}><Text style={styles.buttonText}>+ Ajouter une classe</Text></Pressable>
+        </View>}
+
+        {dataTab==="Noms"&&<View>
+          <Text style={styles.help}>Les noms ne sont affichés que dans cet onglet.</Text>
+          <View style={styles.card}>{names.map((n,i)=><View style={styles.editRow} key={i}><TextInput style={styles.inputFlex} value={n} onChangeText={v=>setNames(xs=>xs.map((x,j)=>j===i?v:x))}/><Pressable onPress={()=>setNames(xs=>xs.filter((_,j)=>j!==i))}><Text style={styles.removeText}>✕</Text></Pressable></View>)}<Pressable style={styles.button} onPress={()=>setNames(x=>[...x,"Nouveau nom"])}><Text style={styles.buttonText}>+ Ajouter un nom</Text></Pressable></View>
+        </View>}
+      </View>}
       {tab==="Dés"&&<View><Text style={styles.h2}>Paramètres des dés</Text><Text style={styles.help}>Nombre de dés • faces • modificateur. Le minimum provoque une relance complète des 6 caractéristiques.</Text>
         <DiceEditor cat="Base"/><DiceEditor cat="Avancée"/><DiceEditor cat="Super"/>
         <Pressable style={styles.button} onPress={()=>setDice(DEFAULT_DICE)}><Text style={styles.buttonText}>Réinitialiser les dés</Text></Pressable>
@@ -250,6 +274,7 @@ const styles=StyleSheet.create({
   input:{backgroundColor:"#20242b",color:"#fff",padding:10,borderRadius:8,marginBottom:8},inputFlex:{flex:1,backgroundColor:"#20242b",color:"#fff",padding:8,borderRadius:8},
   smallInput:{backgroundColor:"#20242b",color:"#fff",padding:8,borderRadius:7,width:85,marginRight:6},row:{flexDirection:"row",alignItems:"center",gap:5},rowWrap:{flexDirection:"row",flexWrap:"wrap",gap:7},
   chip:{padding:9,backgroundColor:"#222832",borderRadius:16,marginRight:7},
+  dataTabs:{flexDirection:"row",gap:7,marginBottom:8},dataTab:{flex:1,padding:11,backgroundColor:"#222832",borderRadius:8,alignItems:"center"},expandHeader:{flexDirection:"row",alignItems:"center",gap:10},
   selectionHint:{fontSize:12,opacity:0.7,marginTop:4,marginBottom:8},categorySelectButton:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",paddingVertical:7,paddingHorizontal:8,borderRadius:8,borderWidth:1,borderColor:"#999"},  classRows:{gap:10,marginBottom:8},classRow:{gap:5},classRowLabel:{color:"#bbb",fontWeight:"700"},classButtons:{flexDirection:"row",flexWrap:"wrap",gap:6},classButton:{padding:9,backgroundColor:"#222832",borderRadius:8},categoryButton:{padding:10,backgroundColor:"#222832",borderRadius:8},selected:{backgroundColor:"#b78b2c"},chipText:{color:"#fff"},
   bigButton:{backgroundColor:"#b78b2c",padding:16,borderRadius:10,marginVertical:14,alignItems:"center"},bigButtonText:{fontWeight:"900",color:"#111"},
   button:{backgroundColor:"#3d4654",padding:12,borderRadius:8,marginTop:10,alignItems:"center"},danger:{backgroundColor:"#74343b",padding:10,borderRadius:8,marginTop:10,alignItems:"center"},buttonText:{color:"#fff",fontWeight:"700"},
