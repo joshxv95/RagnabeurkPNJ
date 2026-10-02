@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 
 type Grade = "A" | "B" | "C";
+type Gender = "Mâle" | "Femelle";
 type Category = "Base" | "Avancée" | "Super";
 
 type DiceRule = { dice: number; faces: number; modifier: number };
@@ -22,7 +23,7 @@ type Race = { id: string; name: string; weight: number; description: string; sub
 type NPC = {
   id: string; name: string; race: string; className: string; category: Category;
   stats: Record<string, number>; grades: Record<string, Grade>;
-  total: number; level: number; palier: number; subRace?: string;
+  total: number; level: number; palier: number; subRace?: string; gender: Gender;
 };
 
 const STATS = ["Force","Dextérité","Agilité","Constitution","Intelligence","Chance"];
@@ -68,10 +69,10 @@ function makeStats(c:ClassDef,dice:Record<Category,DiceSet>){
   return result;
 }
 function getPalier(level:number){ return Math.floor(level/10)+1; }
-function makeNPC(c:ClassDef,r:Race,names:string[],dice:Record<Category,DiceSet>,manualName?:string,subRace?:SubRace):NPC{
+function makeNPC(c:ClassDef,r:Race,names:string[],dice:Record<Category,DiceSet>,manualName?:string,subRace?:SubRace,gender:Gender="Mâle"):NPC{
   const stats=makeStats(c,dice); const total=Object.values(stats).reduce((a,b)=>a+b,0);
   const level=(total-6)*3+1;
-  return {id:Date.now().toString()+Math.random(),name:manualName?.trim()||names[Math.floor(Math.random()*names.length)]||"PNJ",race:r.name,subRace:subRace?.name,className:c.name,category:c.category,stats,grades:{...c.grades},total,level,palier:getPalier(level)};
+  return {id:Date.now().toString()+Math.random(),name:manualName?.trim()||names[Math.floor(Math.random()*names.length)]||"PNJ",race:r.name,subRace:subRace?.name,className:c.name,category:c.category,stats,grades:{...c.grades},total,level,palier:getPalier(level),gender};
 }
 
 function selectedRacesWithSubs(races:Race[],choices:string[]){ const selected=choices.length?races.filter(r=>choices.includes(r.id)):races; return selected.filter(r=>(r.subRaces||[]).length>0); }
@@ -88,6 +89,7 @@ export default function App(){
   const [subRaceChoices,setSubRaceChoices]=useState<Record<string,string[]>>({});
   const [classChoices,setClassChoices]=useState<string[]>([]);
   const [nameChoice,setNameChoice]=useState("");
+  const [genderChoice,setGenderChoice]=useState<"Aléatoire"|Gender>("Aléatoire");
   const [loaded,setLoaded]=useState(false);
   const [bulkSubRaces,setBulkSubRaces]=useState<Record<string,string>>({});
 
@@ -96,7 +98,7 @@ export default function App(){
       const get=async<T,>(key:string,def:T)=>{const x=await AsyncStorage.getItem(key);return x?JSON.parse(x):def};
       setDice(await get(K.dice,DEFAULT_DICE)); setRaces(await get(K.races,DEFAULT_RACES));
       setClasses(await get(K.classes,DEFAULT_CLASSES)); setNames(await get(K.names,DEFAULT_NAMES));
-      const savedNpcs=await get<NPC[]>(K.npcs,[]); setNpcs(savedNpcs.map(n=>{const level=(n.level??((n.total-6)*3+1));return {...n,level,palier:n.palier??getPalier(level)};})); setLoaded(true);
+      const savedNpcs=await get<NPC[]>(K.npcs,[]); setNpcs(savedNpcs.map(n=>{const level=(n.level??((n.total-6)*3+1));return {...n,level,palier:n.palier??getPalier(level),gender:n.gender??"Mâle"};})); setLoaded(true);
     }catch(e){Alert.alert("Erreur","Impossible de charger les données.");}
   })()},[]);
   useEffect(()=>{if(loaded)AsyncStorage.setItem(K.dice,JSON.stringify(dice))},[dice,loaded]);
@@ -122,7 +124,8 @@ export default function App(){
     const selectedSubs=subRaceChoices[r.id]||[];
     const eligibleSubs=selectedSubs.length?subs.filter(s=>selectedSubs.includes(s.id)):subs;
     const sr=eligibleSubs.length?weighted(eligibleSubs):undefined;
-    setCurrent(makeNPC(c,r,names,dice,nameChoice,sr));
+    const gender:Gender=genderChoice==="Aléatoire"?(Math.random()<0.5?"Mâle":"Femelle"):genderChoice;
+    setCurrent(makeNPC(c,r,names,dice,nameChoice,sr,gender));
   };
   const save=()=>{if(!current)return;setNpcs(x=>[current,...x.filter(n=>n.id!==current.id)]);Alert.alert("Sauvegardé","PNJ enregistré.");};
   const deleteNPC=(id:string)=>setNpcs(x=>x.filter(n=>n.id!==id));
@@ -160,7 +163,7 @@ export default function App(){
           {races.map(r=><Pressable key={r.id} onPress={()=>toggleRace(r.id)} style={[styles.classButton,raceChoices.includes(r.id)&&styles.selected]}><Text style={styles.chipText}>{r.name}</Text></Pressable>)}
         </View>
         <Text style={styles.selectionHint}>{raceChoices.length?`${raceChoices.length} race(s) sélectionnée(s)`:"Aucune sélection = toutes les races"}</Text>
-        {selectedRacesWithSubs(races,raceChoices).map(r=><View key={r.id} style={styles.subRaceBlock}>
+        {raceChoices.length===1 && selectedRacesWithSubs(races,raceChoices).map(r=><View key={r.id} style={styles.subRaceBlock}>
           <Text style={styles.label}>Sous-races de {r.name}</Text>
           <View style={styles.classButtons}>
             <Pressable onPress={()=>selectAllSubRaces(r.id,r.subRaces||[])} style={[styles.classButton,(subRaceChoices[r.id]||[]).length===(r.subRaces||[]).length&&styles.selected]}><Text style={styles.chipText}>🎲 Toutes</Text></Pressable>
@@ -176,16 +179,18 @@ export default function App(){
           </View>})}
         </View>
         <Text style={styles.selectionHint}>{classChoices.length?`${classChoices.length} classe(s) sélectionnée(s)`:"Aucune sélection = toutes les classes"}</Text>
+        <Text style={styles.label}>Genre</Text>
+        <View style={styles.rowWrap}>{(["Aléatoire","Mâle","Femelle"] as const).map(g=><Pressable key={g} onPress={()=>setGenderChoice(g)} style={[styles.categoryButton,genderChoice===g&&styles.selected]}><Text style={styles.chipText}>{g}</Text></Pressable>)}</View>
         <Text style={styles.label}>Nom (vide = aléatoire)</Text><TextInput style={styles.input} value={nameChoice} onChangeText={setNameChoice} placeholder="Nom manuel"/>
         <Pressable style={styles.bigButton} onPress={generate}><Text style={styles.bigButtonText}>GÉNÉRER UN PNJ</Text></Pressable>
-        {current&&<View style={styles.card}><Text style={styles.npcName}>{current.name}</Text><Text style={styles.meta}>{current.race}{current.subRace?` • ${current.subRace}`:""} • {current.className} • {current.category}</Text><Text style={styles.level}>Niveau {current.level} • Palier {current.palier} • Total {current.total}</Text>
+        {current&&<View style={styles.card}><Text style={styles.npcName}>{current.name}</Text><Text style={styles.meta}>{current.race}{current.subRace?` • ${current.subRace}`:""} • {current.gender} • {current.className} • {current.category}</Text><Text style={styles.level}>Niveau {current.level} • Palier {current.palier} • Total {current.total}</Text>
           {STATS.map(s=><View style={styles.statRow} key={s}><Text style={styles.statName}>{s}</Text><Text style={styles.grade}>{current.grades[s]}</Text><Text style={styles.statValue}>{current.stats[s]}</Text></View>)}
           <Pressable style={styles.button} onPress={save}><Text style={styles.buttonText}>Sauvegarder</Text></Pressable>
         </View>}
       </View>}
 
       {tab==="PNJ sauvegardés"&&<View><Text style={styles.h2}>{npcs.length} PNJ</Text>{npcs.map(n=><View style={styles.card} key={n.id}>
-        <Text style={styles.npcName}>{n.name}</Text><Text style={styles.meta}>{n.race}{n.subRace?` • ${n.subRace}`:""} • {n.className} • Niveau {n.level} • Palier {n.palier}</Text>
+        <Text style={styles.npcName}>{n.name}</Text><Text style={styles.meta}>{n.race}{n.subRace?` • ${n.subRace}`:""} • {n.gender||"Mâle"} • {n.className} • Niveau {n.level} • Palier {n.palier}</Text>
         {STATS.map(s=><View style={styles.editRow} key={s}><Text style={styles.statName}>{s} ({n.grades[s]})</Text><TextInput style={styles.statInput} keyboardType="numeric" value={String(n.stats[s])} onChangeText={v=>updateStat(n,s,v)}/></View>)}
         <Pressable style={styles.danger} onPress={()=>deleteNPC(n.id)}><Text style={styles.buttonText}>Supprimer</Text></Pressable>
       </View>)}</View>}
