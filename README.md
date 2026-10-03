@@ -64,3 +64,12 @@ Les monstres générés peuvent être sauvegardés localement.
 ## Données
 
 Les races, classes, noms, paramètres de dés, dés d'armure, PNJ et monstres sont conservés localement sur le téléphone avec AsyncStorage. Les données ne nécessitent pas Internet après installation.
+
+
+## v11 — Monstres
+- Les monstres ont désormais une classe : Physique, Magique, Hybride ou Polyvalent. Les classes sont configurables dans Données > Classes monstres.
+- La classe fournit les priorités A/B/C/D des six statistiques. Le poids règle seulement la sélection aléatoire.
+- L'armure naturelle possède trois grades A/B/C. Les six types d'armure utilisent automatiquement les dés du grade choisi.
+- Les dés d'armure restent configurables dans Dés, mais ne sont plus à modifier à chaque génération.
+- Nouvelle formule : Niveau = 1 + floor((Stats−6)/2) + floor((Armure−6)/2). Stats et Armure sont au minimum à 6.
+- Le générateur répartit le niveau demandé entre statistiques et armure, puis affiche le niveau obtenu.

@@ -23,10 +23,13 @@ type SubRace = { id: string; name: string; weight: number; description: string }
 type Race = { id: string; name: string; weight: number; description: string; subRaces?: SubRace[] };
 type ArmorType = "TRA" | "CON" | "PER" | "CHA" | "FRO" | "FOU";
 type ArmorGrades = Record<ArmorType, Grade>;
+type MonsterClassDef = {
+  id:string; name:string; weight:number; grades:Record<string,MonsterGrade>; description:string;
+};
 type Monster = {
-  id:string; name:string; targetLevel:number; level:number; freeLevels:number; palier:number;
+  id:string; name:string; classId:string; className:string; targetLevel:number; level:number; freeLevels:number; palier:number;
   stats:Record<string,number>; statGrades:Record<string,MonsterGrade>; statTotal:number;
-  armor:Record<ArmorType,number>; armorGrades:ArmorGrades; armorTotal:number; armorLevel:number;
+  armorGrade:Grade; armor:Record<ArmorType,number>; armorGrades:ArmorGrades; armorTotal:number; armorLevel:number;
   hpMax:number; hpDifficulties:number[];
 };
 type NPC = {
@@ -43,6 +46,12 @@ const ARMOR_TYPES: {id:ArmorType; name:string}[] = [
 const DEFAULT_ARMOR_DICE: Record<Grade,DiceRule> = {
   A:{dice:1,faces:6,modifier:0}, B:{dice:1,faces:4,modifier:0}, C:{dice:1,faces:3,modifier:-1}
 };
+const DEFAULT_MONSTER_CLASSES: MonsterClassDef[] = [
+  {id:"physique",name:"Physique",weight:50,description:"Créatures qui combattent principalement avec leur corps.",grades:{Force:"A",Dextérité:"C",Agilité:"B",Constitution:"A",Intelligence:"D",Chance:"C"}},
+  {id:"magique",name:"Magique",weight:20,description:"Créatures dont la puissance repose principalement sur la magie.",grades:{Force:"D",Dextérité:"C",Agilité:"C",Constitution:"C",Intelligence:"A",Chance:"B"}},
+  {id:"hybride",name:"Hybride",weight:25,description:"Créatures combinant efficacement capacités physiques et magiques.",grades:{Force:"A",Dextérité:"C",Agilité:"B",Constitution:"B",Intelligence:"A",Chance:"C"}},
+  {id:"polyvalent",name:"Polyvalent",weight:5,description:"Créatures touche-à-tout, sans spécialisation marquée.",grades:{Force:"B",Dextérité:"B",Agilité:"B",Constitution:"B",Intelligence:"B",Chance:"B"}}
+];
 const STAT_PRIORITY_WEIGHT: Record<MonsterGrade,number> = {A:4,B:3,C:1,D:0};
 const MAX_ARMOR_PER_TYPE = 12;
 
@@ -71,7 +80,7 @@ const DEFAULT_CLASSES: ClassDef[] = [
 ];
 
 const K = {
-  dice:"rb.dice.v1", races:"rb.races.v1", classes:"rb.classes.v1",
+  dice:"rb.dice.v1", races:"rb.races.v1", classes:"rb.classes.v1", monsterClasses:"rb.monster.classes.v1",
   names:"rb.names.v1", npcs:"rb.npcs.v1", armorDice:"rb.monster.armorDice.v1", monsters:"rb.monsters.v1"
 };
 
@@ -95,18 +104,17 @@ function makeNPC(c:ClassDef,r:Race,names:string[],dice:Record<Category,DiceSet>,
 
 function weightedStatPick(remaining:string[], grades:Record<string,MonsterGrade>):string{
   const weighted=remaining.map(s=>({s,w:STAT_PRIORITY_WEIGHT[grades[s]]||0}));
-  let total=weighted.reduce((a,x)=>a+x.w,0);
-  if(total<=0){ return remaining[Math.floor(Math.random()*remaining.length)]; }
+  const total=weighted.reduce((a,x)=>a+x.w,0);
+  if(total<=0)return remaining[Math.floor(Math.random()*remaining.length)];
   let x=Math.random()*total;
-  for(const item of weighted){ x-=item.w; if(x<0)return item.s; }
+  for(const item of weighted){x-=item.w;if(x<0)return item.s;}
   return remaining[remaining.length-1];
 }
 function generateMonsterStats(total:number, grades:Record<string,MonsterGrade>){
   const stats:Record<string,number>=Object.fromEntries(STATS.map(s=>[s,0]));
   for(let i=0;i<Math.max(0,total);i++){
     const eligible=STATS.filter(s=>stats[s]<28);
-    const pick=weightedStatPick(eligible,grades);
-    stats[pick]++;
+    const pick=weightedStatPick(eligible,grades); stats[pick]++;
   }
   return stats;
 }
@@ -115,23 +123,40 @@ function hpDifficulties(max:number){
   return Array.from(new Set([max,Math.floor(max*0.8),Math.floor(max*0.6),Math.floor(max*0.4),Math.floor(max*0.2)].filter(v=>v>0)));
 }
 function rollArmor(grades:ArmorGrades,dice:Record<Grade,DiceRule>){
-  const armor:Record<ArmorType,number>=Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,Math.min(MAX_ARMOR_PER_TYPE,Math.max(0,roll(dice[grades[a.id]])))])) as Record<ArmorType,number>;
-  return armor;
+  return Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,Math.min(MAX_ARMOR_PER_TYPE,Math.max(0,roll(dice[grades[a.id]])))])) as Record<ArmorType,number>;
 }
-function buildMonster(name:string,targetLevel:number,statGrades:Record<string,MonsterGrade>,armorGrades:ArmorGrades,armorDice:Record<Grade,DiceRule>){
-  let armor:Record<ArmorType,number>=Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,0])) as Record<ArmorType,number>;
-  let armorTotal=0, armorLevel=0, statTotal=6;
+function armorLevelFromTotal(total:number){ return Math.floor(Math.max(0,total-6)/2); }
+function buildMonster(name:string,targetLevel:number,monsterClass:MonsterClassDef,armorGrade:Grade,armorDice:Record<Grade,DiceRule>){
+  let armor=rollArmor(Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,armorGrade])) as ArmorGrades,armorDice);
+  let armorTotal=Object.values(armor).reduce((a,b)=>a+b,0);
+  let armorLevel=armorLevelFromTotal(armorTotal);
+  // The target level is split between natural armor and stats. Both start at 6.
   for(let attempt=0;attempt<100;attempt++){
-    armor=rollArmor(armorGrades,armorDice); armorTotal=Object.values(armor).reduce((a,b)=>a+b,0); armorLevel=Math.max(0,armorTotal-6);
-    const remaining=targetLevel-armorLevel;
-    if(remaining>=0){ statTotal=6+Math.floor(remaining/2); if(statTotal>=6 && statTotal<=168)break; }
+    armor=rollArmor(Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,armorGrade])) as ArmorGrades,armorDice);
+    armorTotal=Object.values(armor).reduce((a,b)=>a+b,0);
+    if(armorTotal<6)continue;
+    armorLevel=armorLevelFromTotal(armorTotal);
+    if(armorLevel>targetLevel-1)continue;
+    const remaining=targetLevel-1-armorLevel;
+    const statTotal=6+remaining*2;
+    if(statTotal>=6&&statTotal<=168){
+      const stats=generateMonsterStats(statTotal,monsterClass.grades);
+      const level=1+Math.floor((statTotal-6)/2)+armorLevel;
+      const freeLevels=Math.max(0,targetLevel-level);
+      const palier=getPalier(level);
+      const hpMax=9+(stats.Constitution*palier);
+      const armorGrades=Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,armorGrade])) as ArmorGrades;
+      return {id:Date.now().toString()+Math.random(),name:name.trim()||"Monstre",classId:monsterClass.id,className:monsterClass.name,targetLevel,level,freeLevels,palier,stats,statGrades:{...monsterClass.grades},statTotal,armorGrade,armor,armorGrades,armorTotal,armorLevel,hpMax,hpDifficulties:hpDifficulties(hpMax)} as Monster;
+    }
   }
-  const level=((statTotal-6)*2)+armorLevel;
-  const freeLevels=Math.max(0,targetLevel-level);
-  const stats=generateMonsterStats(statTotal,statGrades);
-  const palier=getPalier(level);
-  const hpMax=9+(stats.Constitution*palier);
-  return {id:Date.now().toString()+Math.random(),name:name.trim()||"Monstre",targetLevel,level,freeLevels,palier,stats,statGrades:{...statGrades},statTotal,armor,armorGrades:{...armorGrades},armorTotal,armorLevel,hpMax,hpDifficulties:hpDifficulties(hpMax)} as Monster;
+  // Fallback for extreme targets: keep the minimum legal armor and use the highest legal stat total.
+  armor=rollArmor(Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,armorGrade])) as ArmorGrades,armorDice);
+  while(Object.values(armor).reduce((a,b)=>a+b,0)<6)armor=rollArmor(Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,armorGrade])) as ArmorGrades,armorDice);
+  armorTotal=Object.values(armor).reduce((a,b)=>a+b,0); armorLevel=armorLevelFromTotal(armorTotal);
+  const statTotal=Math.min(168,6+Math.max(0,targetLevel-1-armorLevel)*2);
+  const stats=generateMonsterStats(statTotal,monsterClass.grades); const level=1+Math.floor((statTotal-6)/2)+armorLevel; const palier=getPalier(level); const hpMax=9+(stats.Constitution*palier);
+  const armorGrades=Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,armorGrade])) as ArmorGrades;
+  return {id:Date.now().toString()+Math.random(),name:name.trim()||"Monstre",classId:monsterClass.id,className:monsterClass.name,targetLevel,level,freeLevels:Math.max(0,targetLevel-level),palier,stats,statGrades:{...monsterClass.grades},statTotal,armorGrade,armor,armorGrades,armorTotal,armorLevel,hpMax,hpDifficulties:hpDifficulties(hpMax)} as Monster;
 }
 function selectedRacesWithSubs(races:Race[],choices:string[]){ const selected=choices.length?races.filter(r=>choices.includes(r.id)):races; return selected.filter(r=>(r.subRaces||[]).length>0); }
 
@@ -143,13 +168,14 @@ export default function App(){
   const [npcs,setNpcs]=useState<NPC[]>([]);
   const [monsters,setMonsters]=useState<Monster[]>([]);
   const [armorDice,setArmorDice]=useState(DEFAULT_ARMOR_DICE);
+  const [monsterClasses,setMonsterClasses]=useState<MonsterClassDef[]>(DEFAULT_MONSTER_CLASSES);
   const [monsterName,setMonsterName]=useState("");
   const [monsterLevelMode,setMonsterLevelMode]=useState<"Précis"|"Fourchette">("Précis");
   const [monsterLevel,setMonsterLevel]=useState("10");
   const [monsterMinLevel,setMonsterMinLevel]=useState("4");
   const [monsterMaxLevel,setMonsterMaxLevel]=useState("10");
-  const [monsterStatGrades,setMonsterStatGrades]=useState<Record<string,MonsterGrade>>(Object.fromEntries(STATS.map(s=>[s,"C"])) as Record<string,MonsterGrade>);
-  const [monsterArmorGrades,setMonsterArmorGrades]=useState<ArmorGrades>(Object.fromEntries(ARMOR_TYPES.map(a=>[a.id,"C"])) as ArmorGrades);
+  const [monsterClassChoice,setMonsterClassChoice]=useState("random");
+  const [monsterArmorGrade,setMonsterArmorGrade]=useState<Grade>("B");
   const [monsterCurrent,setMonsterCurrent]=useState<Monster|null>(null);
   const [current,setCurrent]=useState<NPC|null>(null);
   const [tab,setTab]=useState("Générer");
@@ -160,14 +186,14 @@ export default function App(){
   const [genderChoice,setGenderChoice]=useState<"Aléatoire"|Gender>("Aléatoire");
   const [loaded,setLoaded]=useState(false);
   const [bulkSubRaces,setBulkSubRaces]=useState<Record<string,string>>({});
-  const [dataTab,setDataTab]=useState<"Races"|"Classes"|"Noms">("Races");
+  const [dataTab,setDataTab]=useState<"Races"|"Classes"|"Noms"|"Classes monstres">("Races");
   const [expandedRaceIds,setExpandedRaceIds]=useState<string[]>([]);
 
   useEffect(()=>{(async()=>{
     try{
       const get=async<T,>(key:string,def:T)=>{const x=await AsyncStorage.getItem(key);return x?JSON.parse(x):def};
       setDice(await get(K.dice,DEFAULT_DICE)); setRaces(await get(K.races,DEFAULT_RACES));
-      setClasses(await get(K.classes,DEFAULT_CLASSES)); setNames(await get(K.names,DEFAULT_NAMES));
+      setClasses(await get(K.classes,DEFAULT_CLASSES)); setMonsterClasses(await get(K.monsterClasses,DEFAULT_MONSTER_CLASSES)); setNames(await get(K.names,DEFAULT_NAMES));
       setArmorDice(await get(K.armorDice,DEFAULT_ARMOR_DICE));
       const savedMonsters=await get<Monster[]>(K.monsters,[]); setMonsters(savedMonsters);
       const savedNpcs=await get<NPC[]>(K.npcs,[]); setNpcs(savedNpcs.map(n=>{const level=(n.total!=null?(n.total-6)*2:(n.level??1));return {...n,level,palier:getPalier(level),gender:n.gender??"Mâle"};})); setLoaded(true);
@@ -176,6 +202,7 @@ export default function App(){
   useEffect(()=>{if(loaded)AsyncStorage.setItem(K.dice,JSON.stringify(dice))},[dice,loaded]);
   useEffect(()=>{if(loaded)AsyncStorage.setItem(K.races,JSON.stringify(races))},[races,loaded]);
   useEffect(()=>{if(loaded)AsyncStorage.setItem(K.classes,JSON.stringify(classes))},[classes,loaded]);
+  useEffect(()=>{if(loaded)AsyncStorage.setItem(K.monsterClasses,JSON.stringify(monsterClasses))},[monsterClasses,loaded]);
   useEffect(()=>{if(loaded)AsyncStorage.setItem(K.names,JSON.stringify(names))},[names,loaded]);
   useEffect(()=>{if(loaded)AsyncStorage.setItem(K.npcs,JSON.stringify(npcs))},[npcs,loaded]);
   useEffect(()=>{if(loaded)AsyncStorage.setItem(K.armorDice,JSON.stringify(armorDice))},[armorDice,loaded]);
@@ -204,17 +231,20 @@ export default function App(){
   const generateMonster=()=>{
     const name=monsterName.trim();
     if(!name){Alert.alert("Nom manquant","Donne un nom au monstre.");return;}
+    if(!monsterClasses.length){Alert.alert("Classes manquantes","Ajoute au moins une classe de monstre.");return;}
     let target=10;
     if(monsterLevelMode==="Précis"){target=Math.max(1,Number(monsterLevel)||1);}
     else {const min=Math.max(1,Number(monsterMinLevel)||1);const max=Math.max(min,Number(monsterMaxLevel)||min);target=Math.floor(Math.random()*(max-min+1))+min;}
-    setMonsterCurrent(buildMonster(name,target,monsterStatGrades,monsterArmorGrades,armorDice));
+    const chosen=monsterClassChoice==="random"?weighted(monsterClasses):monsterClasses.find(c=>c.id===monsterClassChoice);
+    if(!chosen)return;
+    setMonsterCurrent(buildMonster(name,target,chosen,monsterArmorGrade,armorDice));
   };
   const saveMonster=()=>{if(!monsterCurrent)return;setMonsters(x=>[monsterCurrent,...x.filter(m=>m.id!==monsterCurrent.id)]);Alert.alert("Sauvegardé","Monstre enregistré.");};
 
   const save=()=>{if(!current)return;setNpcs(x=>[current,...x.filter(n=>n.id!==current.id)]);Alert.alert("Sauvegardé","PNJ enregistré.");};
   const deleteNPC=(id:string)=>setNpcs(x=>x.filter(n=>n.id!==id));
   const reset=()=>Alert.alert("Réinitialiser ?","Les données personnalisées seront remplacées par les valeurs par défaut.",[
-    {text:"Annuler",style:"cancel"},{text:"Réinitialiser",style:"destructive",onPress:()=>{setDice(DEFAULT_DICE);setArmorDice(DEFAULT_ARMOR_DICE);setRaces(DEFAULT_RACES);setClasses(DEFAULT_CLASSES);setNames(DEFAULT_NAMES);setMonsters([]);setMonsterCurrent(null);}}
+    {text:"Annuler",style:"cancel"},{text:"Réinitialiser",style:"destructive",onPress:()=>{setDice(DEFAULT_DICE);setArmorDice(DEFAULT_ARMOR_DICE);setRaces(DEFAULT_RACES);setClasses(DEFAULT_CLASSES);setMonsterClasses(DEFAULT_MONSTER_CLASSES);setNames(DEFAULT_NAMES);setMonsters([]);setMonsterCurrent(null);}}
   ]);
 
   const updateStat=(npc:NPC,s:string,v:string)=>{
@@ -280,16 +310,19 @@ export default function App(){
         <Text style={styles.label}>Niveau souhaité</Text>
         <View style={styles.rowWrap}>{(["Précis","Fourchette"] as const).map(m=><Pressable key={m} onPress={()=>setMonsterLevelMode(m)} style={[styles.categoryButton,monsterLevelMode===m&&styles.selected]}><Text style={styles.chipText}>{m}</Text></Pressable>)}</View>
         {monsterLevelMode==="Précis"?<TextInput style={styles.input} keyboardType="numeric" value={monsterLevel} onChangeText={setMonsterLevel} placeholder="Niveau"/>:<View style={styles.row}><TextInput style={styles.smallInput} keyboardType="numeric" value={monsterMinLevel} onChangeText={setMonsterMinLevel} placeholder="Min"/><Text style={styles.chipText}>à</Text><TextInput style={styles.smallInput} keyboardType="numeric" value={monsterMaxLevel} onChangeText={setMonsterMaxLevel} placeholder="Max"/></View>}
-        <Text style={styles.h3}>Priorités des statistiques</Text>
-        <Text style={styles.help}>A/B/C/D servent uniquement de priorité de répartition. A est favorisé, D reste une faiblesse si possible.</Text>
-        {STATS.map(s=><View style={styles.editRow} key={s}><Text style={styles.statName}>{s}</Text><View style={styles.row}>{(["A","B","C","D"] as MonsterGrade[]).map(g=><Pressable key={g} onPress={()=>setMonsterStatGrades(x=>({...x,[s]:g}))} style={[styles.gradeButton,monsterStatGrades[s]===g&&styles.selected]}><Text style={styles.chipText}>{g}</Text></Pressable>)}</View></View>)}
-        <Text style={styles.h3}>Armure naturelle</Text>
-        <Text style={styles.help}>Les six armures sont tirées avec les dés A/B/C configurés dans l'onglet Dés. Le générateur accepte 0 à 12 par type.</Text>
-        {ARMOR_TYPES.map(a=><View style={styles.editRow} key={a.id}><Text style={styles.statName}>{a.id} — {a.name}</Text><View style={styles.row}>{(["A","B","C"] as Grade[]).map(g=><Pressable key={g} onPress={()=>setMonsterArmorGrades(x=>({...x,[a.id]:g}))} style={[styles.gradeButton,monsterArmorGrades[a.id]===g&&styles.selected]}><Text style={styles.chipText}>{g}</Text></Pressable>)}</View></View>)}
+        <Text style={styles.h3}>Classe du monstre</Text>
+        <Text style={styles.help}>La classe définit les priorités de Force, Dextérité, Agilité, Constitution, Intelligence et Chance. Le Polyvalent est volontairement rare.</Text>
+        <View style={styles.rowWrap}>
+          <Pressable onPress={()=>setMonsterClassChoice("random")} style={[styles.categoryButton,monsterClassChoice==="random"&&styles.selected]}><Text style={styles.chipText}>🎲 Aléatoire</Text></Pressable>
+          {monsterClasses.map(c=><Pressable key={c.id} onPress={()=>setMonsterClassChoice(c.id)} style={[styles.categoryButton,monsterClassChoice===c.id&&styles.selected]}><Text style={styles.chipText}>{c.name}</Text></Pressable>)}
+        </View>
+        <Text style={styles.h3}>Grade d'armure naturelle</Text>
+        <Text style={styles.help}>Le grade est choisi une seule fois pour le monstre. Les six types d'armure utilisent automatiquement les dés correspondant à ce grade. Formule : Niveau = 1 + floor((Stats−6)/2) + floor((Armure−6)/2).</Text>
+        <View style={styles.rowWrap}>{(["A","B","C"] as Grade[]).map(g=><Pressable key={g} onPress={()=>setMonsterArmorGrade(g)} style={[styles.categoryButton,monsterArmorGrade===g&&styles.selected]}><Text style={styles.chipText}>Grade {g}</Text></Pressable>)}</View>
         <Pressable style={styles.bigButton} onPress={generateMonster}><Text style={styles.bigButtonText}>GÉNÉRER LE MONSTRE</Text></Pressable>
         {monsterCurrent&&<View style={styles.card}>
-          <Text style={styles.npcName}>{monsterCurrent.name}</Text><Text style={styles.level}>Niveau {monsterCurrent.level} / {monsterCurrent.targetLevel} • Palier {monsterCurrent.palier}</Text>
-          <Text style={styles.meta}>Armure : {monsterCurrent.armorTotal} → +{monsterCurrent.armorLevel} niveau(x) • Stats : {monsterCurrent.statTotal} → +{(monsterCurrent.statTotal-6)*2} niveau(x)</Text>
+          <Text style={styles.npcName}>{monsterCurrent.name}</Text><Text style={styles.meta}>{monsterCurrent.className} • Armure grade {monsterCurrent.armorGrade}</Text><Text style={styles.level}>Niveau {monsterCurrent.level} / {monsterCurrent.targetLevel} • Palier {monsterCurrent.palier}</Text>
+          <Text style={styles.meta}>Armure : {monsterCurrent.armorTotal} → +{monsterCurrent.armorLevel} niveau(x) • Stats : {monsterCurrent.statTotal} → +{Math.floor((monsterCurrent.statTotal-6)/2)} niveau(x)</Text>
           <Text style={styles.meta}>{monsterCurrent.freeLevels?`Niveau(x) libre(s) : ${monsterCurrent.freeLevels}`:"Aucun niveau libre"}</Text>
           <Text style={styles.h3}>Stats</Text>
           {STATS.map(s=><View style={styles.statRow} key={s}><Text style={styles.statName}>{s}</Text><Text style={styles.grade}>{monsterCurrent.statGrades[s]}</Text><Text style={styles.statValue}>{monsterCurrent.stats[s]}</Text></View>)}
@@ -298,7 +331,7 @@ export default function App(){
           <Text style={styles.h3}>PV</Text><Text style={styles.level}>{monsterCurrent.hpMax} / {monsterCurrent.hpDifficulties.slice(1).join(" / ")}</Text>
           <Pressable style={styles.button} onPress={saveMonster}><Text style={styles.buttonText}>Sauvegarder le monstre</Text></Pressable>
         </View>}
-        {monsters.length>0&&<View><Text style={styles.h2}>{monsters.length} monstre(s) sauvegardé(s)</Text>{monsters.map(m=><View style={styles.card} key={m.id}><Text style={styles.npcName}>{m.name}</Text><Text style={styles.meta}>Niveau {m.level} • Palier {m.palier} • PV {m.hpMax} • Armure {m.armorTotal}{m.freeLevels?` • ${m.freeLevels} libre(s)`:""}</Text><Pressable style={styles.danger} onPress={()=>setMonsters(xs=>xs.filter(x=>x.id!==m.id))}><Text style={styles.buttonText}>Supprimer</Text></Pressable></View>)}</View>}
+        {monsters.length>0&&<View><Text style={styles.h2}>{monsters.length} monstre(s) sauvegardé(s)</Text>{monsters.map(m=><View style={styles.card} key={m.id}><Text style={styles.npcName}>{m.name}</Text><Text style={styles.meta}>{m.className} • Armure {m.armorGrade} {m.armorTotal} • Niveau {m.level} • Palier {m.palier} • PV {m.hpMax}{m.freeLevels?` • ${m.freeLevels} libre(s)`:""}</Text><Pressable style={styles.danger} onPress={()=>setMonsters(xs=>xs.filter(x=>x.id!==m.id))}><Text style={styles.buttonText}>Supprimer</Text></Pressable></View>)}</View>}
       </View>}
 
       {tab==="PNJ sauvegardés"&&<View><Text style={styles.h2}>{npcs.length} PNJ</Text>{npcs.map(n=><View style={styles.card} key={n.id}>
@@ -310,7 +343,7 @@ export default function App(){
       {tab==="Données"&&<View>
         <Text style={styles.h2}>Données</Text>
         <View style={styles.dataTabs}>
-          {(["Races","Classes","Noms"] as const).map(t=><Pressable key={t} onPress={()=>setDataTab(t)} style={[styles.dataTab,dataTab===t&&styles.selected]}><Text style={styles.chipText}>{t==="Races"?"🧬 Races":t==="Classes"?"⚔️ Classes":"🧑 Noms"}</Text></Pressable>)}
+          {(["Races","Classes","Classes monstres","Noms"] as const).map(t=><Pressable key={t} onPress={()=>setDataTab(t)} style={[styles.dataTab,dataTab===t&&styles.selected]}><Text style={styles.chipText}>{t==="Races"?"🧬 Races":t==="Classes"?"⚔️ Classes":t==="Classes monstres"?"👹 Monstres":"🧑 Noms"}</Text></Pressable>)}
         </View>
 
         {dataTab==="Races"&&<View>
@@ -362,6 +395,21 @@ export default function App(){
           <Pressable style={styles.button} onPress={()=>setClasses(x=>[...x,{id:Date.now().toString(),name:"Nouvelle classe",category:"Base",grades:Object.fromEntries(STATS.map(s=>[s,"C"])) as Record<string,Grade>}])}><Text style={styles.buttonText}>+ Ajouter une classe</Text></Pressable>
         </View>}
 
+        {dataTab==="Classes monstres"&&<View>
+          <Text style={styles.help}>Les classes de monstres définissent les priorités de génération. Le poids sert uniquement lorsque « Aléatoire » est choisi.</Text>
+          {monsterClasses.map(c=><View style={styles.card} key={c.id}>
+            <Text style={styles.label}>Nom de la classe</Text>
+            <TextInput style={styles.input} value={c.name} onChangeText={v=>setMonsterClasses(xs=>xs.map(x=>x.id===c.id?{...x,name:v}:x))}/>
+            <Text style={styles.label}>Poids aléatoire</Text>
+            <TextInput style={styles.input} keyboardType="numeric" value={String(c.weight)} onChangeText={v=>setMonsterClasses(xs=>xs.map(x=>x.id===c.id?{...x,weight:Number(v)}:x))}/>
+            <Text style={styles.label}>Description</Text>
+            <TextInput style={styles.input} value={c.description} onChangeText={v=>setMonsterClasses(xs=>xs.map(x=>x.id===c.id?{...x,description:v}:x))}/>
+            {STATS.map(s=><View style={styles.editRow} key={s}><Text style={styles.statName}>{s}</Text><View style={styles.row}>{(["A","B","C","D"] as MonsterGrade[]).map(g=><Pressable key={g} onPress={()=>setMonsterClasses(xs=>xs.map(x=>x.id===c.id?{...x,grades:{...x.grades,[s]:g}}:x))} style={[styles.gradeButton,c.grades[s]===g&&styles.selected]}><Text>{g}</Text></Pressable>)}</View></View>)}
+            <Pressable style={styles.danger} onPress={()=>setMonsterClasses(xs=>xs.filter(x=>x.id!==c.id))}><Text style={styles.buttonText}>Supprimer</Text></Pressable>
+          </View>)}
+          <Pressable style={styles.button} onPress={()=>setMonsterClasses(x=>[...x,{id:Date.now().toString()+Math.random(),name:"Nouvelle classe",weight:10,description:"",grades:Object.fromEntries(STATS.map(s=>[s,"C"])) as Record<string,MonsterGrade>}])}><Text style={styles.buttonText}>+ Ajouter une classe de monstre</Text></Pressable>
+        </View>}
+
         {dataTab==="Noms"&&<View>
           <Text style={styles.help}>Les noms ne sont affichés que dans cet onglet.</Text>
           <View style={styles.card}>{names.map((n,i)=><View style={styles.editRow} key={i}><TextInput style={styles.inputFlex} value={n} onChangeText={v=>setNames(xs=>xs.map((x,j)=>j===i?v:x))}/><Pressable onPress={()=>setNames(xs=>xs.filter((_,j)=>j!==i))}><Text style={styles.removeText}>✕</Text></Pressable></View>)}<Pressable style={styles.button} onPress={()=>setNames(x=>[...x,"Nouveau nom"])}><Text style={styles.buttonText}>+ Ajouter un nom</Text></Pressable></View>
@@ -369,7 +417,7 @@ export default function App(){
       </View>}
       {tab==="Dés"&&<View><Text style={styles.h2}>Paramètres des dés</Text><Text style={styles.help}>Nombre de dés • faces • modificateur. Le minimum provoque une relance complète des 6 caractéristiques.</Text>
         <DiceEditor cat="Base"/><DiceEditor cat="Avancée"/><DiceEditor cat="Super"/>
-        <Text style={styles.h2}>Dés d'armure des monstres</Text><Text style={styles.help}>A/B/C sont utilisés pour tirer chaque type d'armure naturelle. Les valeurs sont modifiables.</Text>
+        <Text style={styles.h2}>Dés d'armure des monstres</Text><Text style={styles.help}>Ces dés définissent les trois grades d'armure naturelle. Tu les règles une fois ici ; ensuite, lors de la génération, tu choisis simplement le grade A, B ou C.</Text>
         {(["A","B","C"] as Grade[]).map(g=><View style={styles.card} key={g}><Text style={styles.h3}>Armure {g}</Text><View style={styles.row}>{(["dice","faces","modifier"] as (keyof DiceRule)[]).map(f=><TextInput key={f} style={styles.smallInput} keyboardType="numeric" value={String(armorDice[g][f])} onChangeText={v=>setArmorDice(x=>({...x,[g]:{...x[g],[f]:Number(v)}}))} placeholder={f}/>)}</View></View>)}
         <Pressable style={styles.button} onPress={()=>setArmorDice(DEFAULT_ARMOR_DICE)}><Text style={styles.buttonText}>Réinitialiser les dés d'armure</Text></Pressable>
         <Pressable style={styles.button} onPress={()=>setDice(DEFAULT_DICE)}><Text style={styles.buttonText}>Réinitialiser les dés</Text></Pressable>
