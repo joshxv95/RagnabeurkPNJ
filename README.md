@@ -1,77 +1,66 @@
-# Ragnabeurk PNJ — projet Expo/EAS
+# Ragnabeurk PNJ
 
 Projet mobile Android pour le générateur de PNJ de Ragnabeurk.
 
-## Compilation cloud
+## Compilation depuis GitHub Actions
 
-Le projet est préparé pour produire un APK Android avec Expo Application Services (EAS).
+Le projet contient un workflow `.github/workflows/build-apk.yml` qui compile directement l'APK sur GitHub, sans PC et sans compte EAS.
 
-Sur un environnement disposant de Node.js :
-1. Installer EAS CLI : `npm install -g eas-cli`
-2. Se connecter : `eas login`
-3. Dans ce dossier : `npm install`
-4. Lancer : `eas build -p android --profile preview`
-5. Choisir un projet Expo si EAS le demande.
-6. Le build `preview` est configuré pour produire un `.apk`.
+Depuis un téléphone Android :
+1. Envoyer les fichiers du projet dans le dépôt GitHub.
+2. Ouvrir **Actions**.
+3. Choisir **Build Android APK**.
+4. Appuyer sur **Run workflow**.
+5. Une fois terminé, récupérer l'APK dans **Artifacts → Ragnabeurk-PNJ-APK**.
 
-Le build `production` produit également un APK avec la configuration fournie.
+## PNJ humanoïdes
 
-## Règles par défaut
-
-Base :
-- A = 1d6
-- B = 1d4
-- C = 1d3 - 1
-- minimum = 0
-
-Avancée :
-- A = 2d6
-- B = 2d4 - 1
-- C = 2d3 - 2
-- minimum = 16
-
-Super :
-- A = 3d6
-- B = 3d4 - 2
-- C = 3d3 - 3
-- minimum = 26
+Les classes utilisent trois catégories : Base, Avancée et Super. Chaque classe possède un grade A/B/C libre pour chacune des six caractéristiques.
 
 Niveau :
-(total des 6 statistiques - 6) × 3 + 1
+`(Total des 6 statistiques - 6) × 2`
 
-Le ratio A/B/C d'une classe est totalement libre.
+Les races peuvent avoir des sous-races pondérées. Le genre peut être Mâle, Femelle ou Aléatoire.
+
+## Monstres
+
+Les monstres ont leur propre générateur. Le nom est toujours saisi manuellement.
+
+Le niveau peut être :
+- précis ;
+- tiré aléatoirement dans une fourchette.
+
+### Statistiques
+
+Les six caractéristiques sont comprises entre 0 et 28.
+Les grades A/B/C/D servent de priorités de répartition : A = 4, B = 3, C = 1, D = 0 comme poids de génération.
+
+### Armure naturelle
+
+Six types :
+- TRA — Tranchant
+- CON — Contondant
+- PER — Perforant
+- CHA — Chaleur
+- FRO — Froid
+- FOU — Foudre
+
+Chaque type reçoit un grade A/B/C et est tiré avec les dés d'armure configurables. Une valeur d'armure par type est limitée à 12.
+
+### Formule de niveau
+
+`Niveau = ((Stats - 6) × 2) + (Armure - 6)`
+
+Lorsqu'un niveau cible est demandé, le générateur tire d'abord l'armure puis calcule le budget de statistiques. Si un niveau reste libre parce que le budget restant n'est pas divisible par 2, il est conservé comme niveau libre et n'est pas automatiquement distribué.
+
+### PV
+
+`PV max = 9 + (Constitution × Palier)`
+
+Les cinq difficultés correspondent à 100 %, 80 %, 60 %, 40 % et 20 % des PV maximum, arrondies à l'entier inférieur. Par exemple : `10 / 8 / 6 / 4 / 2`.
+
+Les monstres générés peuvent être sauvegardés localement.
 
 ## Données
 
-Les races, classes, noms, paramètres de dés et PNJ sont conservés localement sur le téléphone avec AsyncStorage. Les données ne nécessitent pas Internet après installation.
-
-Les races utilisent un poids relatif : les poids ne doivent pas obligatoirement totaliser 100.
-
-## Remarque
-
-Le projet est volontairement simple afin de faciliter les builds cloud et les futures modifications.
-
-
-## Compilation gratuite depuis GitHub (sans PC)
-
-Le projet contient maintenant un workflow GitHub Actions qui peut compiler l'application en APK dans le cloud.
-
-### Depuis un téléphone Android
-
-1. Créez un compte gratuit sur GitHub.
-2. Créez un nouveau dépôt (repository), de préférence **privé** si vous ne voulez pas rendre le code public.
-3. Envoyez dans ce dépôt tous les fichiers de ce projet.
-4. Ouvrez l'onglet **Actions** du dépôt.
-5. Sélectionnez **Build Android APK**.
-6. Appuyez sur **Run workflow**.
-7. Une fois la compilation terminée, ouvrez le résultat du workflow.
-8. Dans **Artifacts**, téléchargez **Ragnabeurk-PNJ-APK**.
-9. Décompressez l'archive téléchargée puis installez `Ragnabeurk-PNJ.apk` sur votre téléphone.
-
-Le workflow utilise Expo EAS pour la compilation Android. Aucun PC ni installation de Node.js n'est nécessaire sur votre téléphone.
-
-
-### Compilation GitHub Actions
-
-Le workflow GitHub Actions compile directement l'application Android sur le serveur GitHub.
-Il ne nécessite pas de compte EAS ni de clé EXPO_TOKEN.
+Les races, classes, noms, paramètres de dés, dés d'armure, PNJ et monstres sont conservés localement sur le téléphone avec AsyncStorage. Les données ne nécessitent pas Internet après installation.
