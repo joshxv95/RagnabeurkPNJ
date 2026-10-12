@@ -98,7 +98,11 @@ function makeStats(c:ClassDef,dice:Record<Category,DiceSet>){
   let result:Record<string,number>;
   do {
     result={};
-    for(const s of STATS) result[s]=roll(dice[c.category][c.grades[s]]);
+    for(const s of STATS){
+      const grade=c.grades[s] ?? (s==="Vitalité" ? c.grades["Constitution"] : undefined) ?? "C";
+      const rule=dice[c.category]?.[grade] ?? DEFAULT_DICE[c.category]?.[grade] ?? DEFAULT_DICE.Base.C;
+      result[s]=roll(rule);
+    }
   } while(Object.values(result).reduce((a,b)=>a+b,0)<dice[c.category].minimum);
   return result;
 }
@@ -198,7 +202,14 @@ export default function App(){
     try{
       const get=async<T,>(key:string,def:T)=>{const x=await AsyncStorage.getItem(key);return x?JSON.parse(x):def};
       setDice(await get(K.dice,DEFAULT_DICE)); setRaces(await get(K.races,DEFAULT_RACES));
-      setClasses(await get(K.classes,DEFAULT_CLASSES)); setMonsterClasses(await get(K.monsterClasses,DEFAULT_MONSTER_CLASSES)); setNames(await get(K.names,DEFAULT_NAMES));
+      const savedClasses=await get<ClassDef[]>(K.classes,DEFAULT_CLASSES);
+      setClasses(savedClasses.map(c=>{
+        const grades={...(c.grades||{})};
+        if(grades.Vitalité==null && grades.Constitution!=null) grades.Vitalité=grades.Constitution;
+        delete grades.Constitution;
+        for(const stat of STATS) if(!grades[stat]) grades[stat]="C";
+        return {...c,grades};
+      })); setMonsterClasses(await get(K.monsterClasses,DEFAULT_MONSTER_CLASSES)); setNames(await get(K.names,DEFAULT_NAMES));
       const savedArmorDice=await get<Partial<Record<ArmorGrade,DiceRule>>>(K.armorDice,DEFAULT_ARMOR_DICE);
       setArmorDice({...DEFAULT_ARMOR_DICE,...savedArmorDice});
       const savedMonsters=await get<Monster[]>(K.monsters,[]);
